@@ -1,4 +1,5 @@
 import { binPayouts } from '$lib/constants/game';
+import { precomputedBallPositions } from '$lib/constants/precomputed';
 import {
   rowCount,
   winRecords,
@@ -101,6 +102,9 @@ class PlinkoEngine {
     },
   };
 
+  private binPositionsRecord: Record<number, Set<number>> = {};
+  private precomputedBallPositions: Record<number, number[]> = precomputedBallPositions;
+
   /**
    * Creates the engine and the game's layout.
    *
@@ -183,15 +187,22 @@ class PlinkoEngine {
    * Drops a new ball from the top with a random horizontal offset, and deducts the balance.
    */
   dropBall() {
-    const ballOffsetRangeX = this.pinDistanceX * 0.8;
+    let randomBinNumber = Math.floor(Math.random() * (this.rowCount));
+    let arr = this.precomputedBallPositions[randomBinNumber];
+    let randomValue = Math.floor(Math.random() * arr.length);
+    let at = arr[randomValue];
+    console.log(randomBinNumber);
+
+    const ballOffsetRangeX = this.pinDistanceX * 0.85;
     const ballRadius = this.pinRadius * 2;
     const { friction, frictionAirByRowCount } = PlinkoEngine.ballFrictions;
+    let ballRandomXPosition = at ?? getRandomBetween(
+      this.canvas.width / 2 - ballOffsetRangeX,
+      this.canvas.width / 2 + ballOffsetRangeX,
+    );
 
     const ball = Matter.Bodies.circle(
-      getRandomBetween(
-        this.canvas.width / 2 - ballOffsetRangeX,
-        this.canvas.width / 2 + ballOffsetRangeX,
-      ),
+      ballRandomXPosition,
       0,
       ballRadius,
       {
@@ -205,6 +216,7 @@ class PlinkoEngine {
         render: {
           fillStyle: '#ff0000',
         },
+        label: ballRandomXPosition.toString(),
       },
     );
     Matter.Composite.add(this.engine.world, ball);
@@ -243,6 +255,12 @@ class PlinkoEngine {
       return;
     }
 
+    // Reset the positions record when row count changes
+    this.binPositionsRecord = {};
+    for (let i = 0; i < rowCount + 1; i++) {
+      this.binPositionsRecord[i] = new Set();
+    }
+
     this.removeAllBalls();
 
     this.rowCount = rowCount;
@@ -255,6 +273,18 @@ class PlinkoEngine {
   private handleBallEnterBin(ball: Matter.Body) {
     const binIndex = this.pinsLastRowXCoords.findLastIndex((pinX) => pinX < ball.position.x);
     if (binIndex !== -1 && binIndex < this.pinsLastRowXCoords.length - 1) {
+      
+      // Record the position
+      // if (this.binPositionsRecord[binIndex].size < 100) {
+      //   this.binPositionsRecord[binIndex].add(Number(ball.label));
+      //   console.log('Bin Positions Record:', Object.fromEntries(
+      //     Object.entries(this.binPositionsRecord).map(([bin, positions]) => [
+      //       bin,
+      //       Array.from(positions)
+      //     ])
+      //   ));
+      // }
+      
       const betAmount = get(betAmountOfExistingBalls)[ball.id] ?? 0;
       const multiplier = binPayouts[this.rowCount][this.riskLevel][binIndex];
       const payoutValue = betAmount * multiplier;
